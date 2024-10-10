@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 // a
@@ -104,6 +106,55 @@ func TestStacktraceContext(t *testing.T) {
 	if len(f.PostContext) != 2 || f.PostContext[0] != "\t// b" || f.PostContext[1] != "}" {
 		t.Errorf("incorrect PostContext %#v", f.PostContext)
 	}
+}
+
+func traceErrorWithStack() error {
+	// const depth = 32
+	// var pcs [depth]uintptr
+	// callers := runtime.Callers(3, pcs[:])
+	// fmt.Fprintln(os.Stderr, callers, pcs)
+
+	return errors.WithStack(errors.New("oops"))
+}
+
+func TestStacktraceErrorsWithStack(t *testing.T) {
+	err := traceErrorWithStack()
+	st := GetOrNewStacktrace(err, 0, 0, []string{thisPackage})
+
+	if st == nil {
+		t.Error("failed to get stacktrace from errors.WithStack() error")
+	}
+	if len(st.Frames) != 3 {
+		t.Error("unexpected number of stack frames")
+	}
+
+	// 0: tRunner
+	f := st.Frames[0]
+	if f.Function != "tRunner" {
+		t.Error("incorrect Function", f.Function)
+	}
+
+	// 1: TestStacktraceErrorsWithStack (this function)
+	f = st.Frames[1]
+	if f.Function != "TestStacktraceErrorsWithStack" {
+		t.Error("incorrect Function", f.Function)
+	}
+	if f.Module != thisPackage {
+		t.Error("incorrect Module:", f.Module)
+	}
+
+	// 2: traceErrorWithStack
+	f = st.Frames[2]
+	if f.Function != "traceErrorWithStack" {
+		t.Error("incorrect Function", f.Function)
+	}
+	if f.Module != thisPackage {
+		t.Error("incorrect Module:", f.Module)
+	}
+
+	// for i, frame := range st.Frames {
+	// 	fmt.Fprintf(os.Stderr, "[%d]: %+v\n", i, frame)
+	// }
 }
 
 func derivePackage() (file, pack string) {
