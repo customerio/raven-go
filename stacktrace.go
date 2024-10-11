@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/pkg/errors"
 )
 
 // Stacktrace defines Sentry's spec compliant interface holding Stacktrace information - https://docs.sentry.io/development/sdk-dev/interfaces/stacktrace/
@@ -52,8 +54,52 @@ type StacktraceFrame struct {
 	InApp        bool     `json:"in_app"`
 }
 
+func getPkgErrorsStacktrace(err error, context int, appPackagePrefixes []string) *Stacktrace {
+	type pkgErrorsStacktracer interface {
+		StackTrace() errors.StackTrace
+	}
+
+	stacktracer, errHasStacktrace := err.(pkgErrorsStacktracer)
+	if !errHasStacktrace {
+		return nil
+	}
+
+	st := stacktracer.StackTrace()
+	var frames []*StacktraceFrame
+
+	for _, f := range st {
+		pc := uintptr(f) - 1
+		// pc := uintptr(st[i]) - 1
+		// pc := uintptr(f)
+		fn := runtime.FuncForPC(pc)
+		// fmt.Fprintln(os.Stderr, pc, fn, st[i])
+		var fName string
+		var file string
+		var line int
+		if fn != nil {
+			file, line = fn.FileLine(pc)
+			fName = fn.Name()
+		} else {
+			file = "unknown"
+			fName = "unknown"
+		}
+		frame := NewStacktraceFrame(pc, fName, file, line, context, appPackagePrefixes)
+		if frame != nil {
+			frames = append([]*StacktraceFrame{frame}, frames...)
+		}
+	}
+
+	return &Stacktrace{Frames: frames}
+}
+
 // GetOrNewStacktrace tries to get stacktrace from err as an interface of github.com/pkg/errors, or else NewStacktrace()
 func GetOrNewStacktrace(err error, skip int, context int, appPackagePrefixes []string) *Stacktrace {
+	// Try to extract stacktrace from errors.WithStack
+	pkgErrorsStacktrace := getPkgErrorsStacktrace(err, context, appPackagePrefixes)
+	if pkgErrorsStacktrace != nil {
+		return pkgErrorsStacktrace
+	}
+
 	type stackTracer interface {
 		StackTrace() []runtime.Frame
 	}
@@ -177,11 +223,11 @@ func isInAppFrame(frame StacktraceFrame, appPackagePrefixes []string) bool {
 	if frame.Module == "main" {
 		return true
 	}
-  for _, prefix := range appPackagePrefixes {
-    if strings.HasPrefix(frame.Module, prefix) && !strings.Contains(frame.Module, "vendor") && !strings.Contains(frame.Module, "third_party") {
-      return true
-    }
-  }
+	for _, prefix := range appPackagePrefixes {
+		if strings.HasPrefix(frame.Module, prefix) && !strings.Contains(frame.Module, "vendor") && !strings.Contains(frame.Module, "third_party") {
+			return true
+		}
+	}
 	return false
 }
 
