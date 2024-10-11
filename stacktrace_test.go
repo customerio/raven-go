@@ -57,7 +57,7 @@ func TestFunctionName(t *testing.T) {
 
 func TestStacktrace(t *testing.T) {
 	st := trace()
-	if st == nil {
+	if st == nil || st.Frames == nil {
 		t.Error("got nil stacktrace")
 	}
 	if len(st.Frames) == 0 {
@@ -109,11 +109,6 @@ func TestStacktraceContext(t *testing.T) {
 }
 
 func traceErrorWithStack() error {
-	// const depth = 32
-	// var pcs [depth]uintptr
-	// callers := runtime.Callers(3, pcs[:])
-	// fmt.Fprintln(os.Stderr, callers, pcs)
-
 	return errors.WithStack(errors.New("oops"))
 }
 
@@ -121,11 +116,14 @@ func TestStacktraceErrorsWithStack(t *testing.T) {
 	err := traceErrorWithStack()
 	st := GetOrNewStacktrace(err, 0, 0, []string{thisPackage})
 
-	if st == nil {
+	if st == nil || st.Frames == nil {
 		t.Error("failed to get stacktrace from errors.WithStack() error")
 	}
 	if len(st.Frames) != 3 {
 		t.Error("unexpected number of stack frames")
+	}
+	if st.Frames[0] == nil {
+		t.Error("frame 0 is nil")
 	}
 
 	// 0: tRunner
