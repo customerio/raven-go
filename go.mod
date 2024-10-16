@@ -1,4 +1,4 @@
-module github.com/richdawe-cio/raven-go
+module github.com/customerio/raven-go
 
 go 1.22
 

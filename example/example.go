@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/richdawe-cio/raven-go"
+	"github.com/customerio/raven-go"
 )
 
 func trace() *raven.Stacktrace {
